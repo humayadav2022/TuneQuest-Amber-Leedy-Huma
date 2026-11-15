@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://db8wc0txdt6wk"
-path="res://.godot/imported/795c591f1756808dd3ec56aa8f61e70d.jpg-27d4c194380c53fd5cdff5b4ec68ce94.ctex"
+uid="uid://k4cuf521x82l"
+path="res://.godot/imported/half-music-note-vector-icon-260nw-441617680.png-683291c5e560136df83277d7708ad1aa.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://795c591f1756808dd3ec56aa8f61e70d.jpg"
-dest_files=["res://.godot/imported/795c591f1756808dd3ec56aa8f61e70d.jpg-27d4c194380c53fd5cdff5b4ec68ce94.ctex"]
+source_file="res://half-music-note-vector-icon-260nw-441617680.png"
+dest_files=["res://.godot/imported/half-music-note-vector-icon-260nw-441617680.png-683291c5e560136df83277d7708ad1aa.ctex"]
 
 [params]
 

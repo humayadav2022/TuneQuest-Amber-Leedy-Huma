@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://bwxvje4rlavw"]
+
+[ext_resource type="Script" uid="uid://nvugk7cmecov" path="res://1_4_note.gd" id="1_bnb3s"]
+[ext_resource type="Texture2D" uid="uid://dgf7m4a7ke6dn" path="res://98514142-muziek-noot-pictogram-wit-pictogram-op-zwarte-achtergrond-inversie-vector-illustratie.png" id="2_bnb3s"]
+
+[node name="14Note" type="Node2D" unique_id=1974056825]
+script = ExtResource("1_bnb3s")
+
+[node name="quater_note" type="Sprite2D" parent="." unique_id=918994057]
+position = Vector2(-97.59506, 95.504654)
+scale = Vector2(0.2070892, 0.20265351)
+texture = ExtResource("2_bnb3s")
