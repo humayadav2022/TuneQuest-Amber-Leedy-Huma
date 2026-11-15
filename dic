@@ -1,0 +1,325 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="GDScript" id="GDScript_main"]
+script/source = "extends Node2D
+
+const KEY_TO_NOTE: Dictionary = {
+	KEY_Q: \"C#\", KEY_W: \"D#\", KEY_E: \"E#\", KEY_R: \"F#\",
+	KEY_I: \"G#\", KEY_O: \"A#\", KEY_P: \"B#\",
+	KEY_A: \"C\", KEY_S: \"D\", KEY_D: \"E\", KEY_F: \"F\",
+	KEY_J: \"G\", KEY_K: \"A\", KEY_L: \"B\",
+	KEY_Z: \"Cb\", KEY_X: \"Db\", KEY_C: \"Eb\", KEY_V: \"Fb\",
+	KEY_B: \"Gb\", KEY_N: \"Ab\", KEY_M: \"Bb\"
+}
+
+const PIANO_LAYOUT: Array[Dictionary] = [
+	{\"key\": \"A\", \"note\": \"C\",  \"type\": \"normal\"},
+	{\"key\": \"Q\", \"note\": \"C#\", \"type\": \"sharp\"},
+	{\"key\": \"Z\", \"note\": \"Cb\", \"type\": \"flat\"},
+	{\"key\": \"S\", \"note\": \"D\",  \"type\": \"normal\"},
+	{\"key\": \"W\", \"note\": \"D#\", \"type\": \"sharp\"},
+	{\"key\": \"X\", \"note\": \"Db\", \"type\": \"flat\"},
+	{\"key\": \"D\", \"note\": \"E\",  \"type\": \"normal\"},
+	{\"key\": \"E\", \"note\": \"E#\", \"type\": \"sharp\"},
+	{\"key\": \"C\", \"note\": \"Eb\", \"type\": \"flat\"},
+	{\"key\": \"F\", \"note\": \"F\",  \"type\": \"normal\"},
+	{\"key\": \"R\", \"note\": \"F#\", \"type\": \"sharp\"},
+	{\"key\": \"V\", \"note\": \"Fb\", \"type\": \"flat\"},
+	{\"key\": \"J\", \"note\": \"G\",  \"type\": \"normal\"},
+	{\"key\": \"I\", \"note\": \"G#\", \"type\": \"sharp\"},
+	{\"key\": \"B\", \"note\": \"Gb\", \"type\": \"flat\"},
+	{\"key\": \"K\", \"note\": \"A\",  \"type\": \"normal\"},
+	{\"key\": \"O\", \"note\": \"A#\", \"type\": \"sharp\"},
+	{\"key\": \"N\", \"note\": \"Ab\", \"type\": \"flat\"},
+	{\"key\": \"L\", \"note\": \"B\",  \"type\": \"normal\"},
+	{\"key\": \"P\", \"note\": \"B#\", \"type\": \"sharp\"},
+	{\"key\": \"M\", \"note\": \"Bb\", \"type\": \"flat\"}
+]
+
+@onready var songs: Dictionary = {
+	\"wave_1\": {
+		\"title\": \"Song 1: C Major Awakening\",
+		\"notes\": [\"C\", \"E\", \"G\", \"C\"],
+		\"speed\": 95.0,
+		\"spawn_interval\": 1.4,
+		\"on_complete\": start_wave_2
+	},
+	\"wave_2\": {
+		\"title\": \"Song 2: D Major Onslaught\",
+		\"notes\": [\"D\", \"F#\", \"A\", \"G\", \"B\", \"D\"],
+		\"speed\": 130.0,
+		\"spawn_interval\": 1.1,
+		\"on_complete\": win_game
+	}
+}
+
+@onready var player_avatar: Node2D = $PlayerAvatar
+@onready var spawn_marker: Marker2D = $SpawnMarker
+@onready var song_player: AudioStreamPlayer = $SongPlayer
+@onready var status_label: Label = $UI/StatusLabel
+@onready var score_label: Label = $UI/ScoreLabel
+@onready var piano_container: HBoxContainer = $UI/PianoContainer
+@onready var focus_grabber: Control = $UI/FocusGrabber
+
+var current_wave: String = \"wave_1\"
+var active_zombies: Array[Dictionary] = []
+var notes_defeated: int = 0
+var score: int = 0
+var is_wave_active: bool = false
+
+func _ready() -> void:
+	_build_on_screen_piano()
+	focus_grabber.grab_focus()
+	start_wave(\"wave_1\")
+
+func _build_on_screen_piano() -> void:
+	for item in PIANO_LAYOUT:
+		var btn := Button.new()
+		btn.text = item[\"note\"] + \"\\n[\" + item[\"key\"] + \"]\"
+		btn.custom_minimum_size = Vector2(46, 110)
+		btn.focus_mode = Control.FOCUS_NONE
+		
+		if item[\"type\"] == \"normal\":
+			btn.modulate = Color(1.0, 1.0, 1.0)
+		elif item[\"type\"] == \"sharp\":
+			btn.modulate = Color(0.65, 0.85, 1.0)
+		else:
+			btn.modulate = Color(0.95, 0.75, 1.0)
+			
+		var note_str: String = item[\"note\"]
+		btn.pressed.connect(func(): _on_note_triggered(note_str))
+		piano_container.add_child(btn)
+
+func _process(delta: float) -> void:
+	if not is_wave_active:
+		return
+		
+	for z in active_zombies:
+		var node: Node2D = z[\"node\"]
+		node.position.x -= z[\"speed\"] * delta
+		node.position.y = spawn_marker.position.y + sin(Time.get_ticks_msec() * 0.01) * 4.0
+		
+		if node.position.x <= player_avatar.position.x + 42.0:
+			_restart_wave(\"A zombie reached you! Restarting song...\")
+			return
+
+func start_wave(wave_key: String) -> void:
+	current_wave = wave_key
+	notes_defeated = 0
+	is_wave_active = true
+	_clear_all_zombies()
+	
+	var wave_data: Dictionary = songs[wave_key]
+	var note_list: Array = wave_data[\"notes\"]
+	status_label.text = wave_data[\"title\"]
+	_update_score_ui()
+	
+	if wave_data.has(\"audio\"):
+		song_player.stream = wave_data[\"audio\"]
+		song_player.play()
+	
+	for note in note_list:
+		if not is_wave_active or current_wave != wave_key:
+			return
+		_spawn_zombie(note, wave_data[\"speed\"])
+		await get_tree().create_timer(wave_data[\"spawn_interval\"]).timeout
+
+func _spawn_zombie(note: String, speed: float) -> void:
+	var zombie_node := Node2D.new()
+	zombie_node.position = spawn_marker.position
+	
+	var body := ColorRect.new()
+	body.size = Vector2(44, 118)
+	body.position = Vector2(-22, -54)
+	body.color = Color(0.28, 0.78, 0.36, 1.0)
+	zombie_node.add_child(body)
+	
+	var eye := ColorRect.new()
+	eye.size = Vector2(12, 10)
+	eye.position = Vector2(-18, -40)
+	eye.color = Color(1.0, 0.25, 0.25, 1.0)
+	zombie_node.add_child(eye)
+	
+	var badge := ColorRect.new()
+	badge.size = Vector2(54, 32)
+	badge.position = Vector2(-27, -96)
+	badge.color = Color(0.08, 0.09, 0.14, 0.9)
+	zombie_node.add_child(badge)
+	
+	var note_label := Label.new()
+	note_label.text = note
+	note_label.position = Vector2(-27, -93)
+	note_label.size = Vector2(54, 28)
+	note_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	note_label.add_theme_font_size_override(\"font_size\", 20)
+	zombie_node.add_child(note_label)
+	
+	add_child(zombie_node)
+	
+	active_zombies.append({
+		\"node\": zombie_node,
+		\"note\": note,
+		\"speed\": speed
+	})
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		focus_grabber.grab_focus()
+		
+	if event is InputEventKey and event.pressed and not event.echo:
+		var code: Key = event.keycode if event.keycode != KEY_NONE else event.physical_keycode
+		if KEY_TO_NOTE.has(code):
+			_on_note_triggered(KEY_TO_NOTE[code])
+
+func _on_note_triggered(played_note: String) -> void:
+	if not is_wave_active or active_zombies.is_empty():
+		status_label.text = \"Played: \" + played_note
+		return
+		
+	_check_front_zombie(played_note)
+
+func _check_front_zombie(played_note: String) -> void:
+	var front_zombie: Dictionary = active_zombies[0]
+	
+	if played_note == front_zombie[\"note\"]:
+		active_zombies.pop_front()
+		_animate_zombie_defeat(front_zombie[\"node\"])
+		notes_defeated += 1
+		score += 100
+		_update_score_ui()
+		status_label.text = \"HIT! Defeated \" + played_note + \"!\"
+		
+		var total_notes: int = songs[current_wave][\"notes\"].size()
+		if notes_defeated >= total_notes:
+			is_wave_active = false
+			song_player.stop()
+			songs[current_wave][\"on_complete\"].call()
+	else:
+		_restart_wave(\"MISSED! Played \" + played_note + \" (needed \" + front_zombie[\"note\"] + \"). Restarting!\")
+
+func _animate_zombie_defeat(zombie_node: Node2D) -> void:
+	var tween := create_tween()
+	zombie_node.modulate = Color(2.0, 2.0, 2.0, 1.0)
+	tween.set_parallel(true)
+	tween.tween_property(zombie_node, \"position:y\", zombie_node.position.y - 40.0, 0.25)
+	tween.tween_property(zombie_node, \"modulate:a\", 0.0, 0.25)
+	tween.chain().tween_callback(zombie_node.queue_free)
+
+func _restart_wave(reason: String) -> void:
+	if not is_wave_active:
+		return
+		
+	is_wave_active = false
+	song_player.stop()
+	status_label.text = reason
+	_clear_all_zombies()
+	
+	var tween := create_tween()
+	player_avatar.modulate = Color(1.0, 0.3, 0.3)
+	tween.tween_property(player_avatar, \"modulate\", Color.WHITE, 0.4)
+	
+	await get_tree().create_timer(1.3).timeout
+	start_wave(current_wave)
+
+func _clear_all_zombies() -> void:
+	for z in active_zombies:
+		if is_instance_valid(z[\"node\"]):
+			z[\"node\"].queue_free()
+	active_zombies.clear()
+
+func _update_score_ui() -> void:
+	score_label.text = current_wave.to_upper() + \" | Score: \" + str(score)
+
+func start_wave_2() -> void:
+	status_label.text = \"Wave 1 Cleared! Get ready for Wave 2...\"
+	await get_tree().create_timer(1.6).timeout
+	start_wave(\"wave_2\")
+
+func win_game() -> void:
+	status_label.text = \"VICTORY! You defeated the musical zombie horde! Final Score: \" + str(score)
+"
+
+[node name="GameLevel" type="Node2D"]
+script = SubResource("GDScript_main")
+
+[node name="SkyBackground" type="ColorRect" parent="."]
+offset_right = 1152.0
+offset_bottom = 648.0
+color = Color(0.11, 0.13, 0.22, 1)
+
+[node name="Ground" type="ColorRect" parent="."]
+offset_top = 420.0
+offset_right = 1152.0
+offset_bottom = 648.0
+color = Color(0.18, 0.26, 0.2, 1)
+
+[node name="GroundTrim" type="ColorRect" parent="."]
+offset_top = 414.0
+offset_right = 1152.0
+offset_bottom = 422.0
+color = Color(0.32, 0.55, 0.36, 1)
+
+[node name="PlayerAvatar" type="Node2D" parent="."]
+position = Vector2(160, 350)
+
+[node name="Body" type="ColorRect" parent="PlayerAvatar"]
+offset_left = -22.0
+offset_top = -60.0
+offset_right = 22.0
+offset_bottom = 64.0
+color = Color(0.24, 0.62, 0.96, 1)
+
+[node name="Visor" type="ColorRect" parent="PlayerAvatar"]
+offset_left = 4.0
+offset_top = -46.0
+offset_right = 20.0
+offset_bottom = -32.0
+color = Color(0.85, 0.97, 1, 1)
+
+[node name="PlayerTag" type="Label" parent="PlayerAvatar"]
+offset_left = -30.0
+offset_top = -88.0
+offset_right = 30.0
+offset_bottom = -65.0
+text = "BARD"
+horizontal_alignment = 1
+
+[node name="SpawnMarker" type="Marker2D" parent="."]
+position = Vector2(1050, 350)
+
+[node name="SongPlayer" type="AudioStreamPlayer" parent="."]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="FocusGrabber" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+
+[node name="TopBanner" type="ColorRect" parent="UI"]
+offset_right = 1152.0
+offset_bottom = 64.0
+color = Color(0.06, 0.07, 0.12, 0.85)
+
+[node name="StatusLabel" type="Label" parent="UI"]
+offset_left = 24.0
+offset_top = 16.0
+offset_right = 800.0
+offset_bottom = 48.0
+theme_override_font_sizes/font_size = 22
+text = "Loading Wave 1..."
+
+[node name="ScoreLabel" type="Label" parent="UI"]
+offset_left = 850.0
+offset_top = 16.0
+offset_right = 1120.0
+offset_bottom = 48.0
+theme_override_font_sizes/font_size = 22
+text = "Wave: 1 | Score: 0"
+horizontal_alignment = 2
+
+
